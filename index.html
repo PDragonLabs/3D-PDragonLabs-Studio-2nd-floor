@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>2nd floor PDragonLabs Studio</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<style>
+			body { margin: 0; overflow: hidden; font-family: sans-serif; }
+			canvas { display: block; }
+            #info {
+                position: absolute;
+                top: 10px;
+                width: 100%;
+                text-align: center;
+                z-index: 100;
+                display:block;
+                color: white;
+                font-family: monospace;
+                font-size: 1.2em;
+                pointer-events: none;
+            }
+            .control-panel {
+                padding: 10px 20px;
+                background-color: rgba(0,0,0,0.7);
+                border-radius: 15px;
+                color: white;
+                display: flex;
+                align-items: center;
+                gap: 15px;
+                transition: transform 0.3s ease-in-out, opacity 0.3s;
+            }
+            #audio-controls-container {
+                position: absolute;
+                bottom: 20px;
+                left: 20px;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+                z-index: 101;
+            }
+            #audio-controls-container.hidden {
+                transform: translateX(calc(-100% - 30px));
+            }
+            #sample-editor {
+                visibility: hidden;
+                opacity: 0;
+            }
+            #sample-editor.visible {
+                visibility: visible;
+                opacity: 1;
+            }
+            #settings-panel {
+                position: absolute;
+                top: 20px;
+                right: 20px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+                z-index: 101;
+            }
+            #settings-panel.hidden {
+                transform: translateX(calc(100% + 30px));
+            }
+            #menu-toggle-button, #audio-toggle-button {
+                position: absolute;
+                z-index: 102;
+            }
+            #menu-toggle-button { top: 20px; right: 20px; }
+            #audio-toggle-button { bottom: 20px; left: 20px; }
+            
+            .control-panel button, .control-panel label, .control-panel select, .control-panel input[type="text"] {
+                background-color: #444;
+                border: 1px solid #666;
+                color: white;
+                padding: 10px 15px;
+                border-radius: 5px;
+                cursor: pointer;
+                transition: background-color 0.2s;
+            }
+            .control-panel input[type="text"] { cursor: text; }
+            .control-panel button:hover, .control-panel label:hover {
+                background-color: #666;
+            }
+            .control-panel button.active, .control-panel button.recording {
+                background-color: #e64c4c;
+                animation: pulse 1.5s infinite;
+            }
+            @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(230, 76, 76, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(230, 76, 76, 0); } 100% { box-shadow: 0 0 0 0 rgba(230, 76, 76, 0); } }
+            .control-panel button:disabled { background-color: #222; color: #555; cursor: not-allowed; }
+            #now-playing { min-width: 200px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            #audio-upload, #image-upload { display: none; }
+            .setting-item { display: flex; align-items: center; gap: 10px; width: 100%; justify-content: space-between; }
+            .setting-item label { flex-shrink: 0; }
+            .setting-item select, .setting-item input { width: 100%; }
+            #color-palette { display: flex; gap: 5px; margin-top: 5px; }
+            .color-swatch { width: 30px; height: 30px; border: 1px solid #fff; border-radius: 5px; cursor: pointer; transition: transform 0.2s; }
+            .color-swatch:hover { transform: scale(1.1); }
+            #sample-pads-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; width: 100%;}
+            .sample-pad { background-color: #333; border: 1px solid #555; border-radius: 5px; padding: 5px; text-align: center; font-size: 0.8em;}
+            .sample-pad-name { height: 20px; overflow: hidden; }
+            .sample-pad-controls { display: flex; flex-direction: column; justify-content: space-around; margin-top: 5px; gap: 5px; }
+            .sample-pad-controls .button-row { display: flex; justify-content: space-around; gap: 5px; }
+            .sample-pad-controls button { padding: 5px; width: 48%; }
+            .sample-pad-controls input[type="range"] { width: 95%; }
+		</style>
+	</head>
+	<body>
+        <div id="info">Welcome to the Studio!</div>
+
+        <button id="menu-toggle-button" class="control-panel" style="padding: 10px;">Settings</button>
+        <button id="audio-toggle-button" class="control-panel" style="padding: 10px;">Audio</button>
+
+        <!-- Settings Panel -->
+        <div id="settings-panel" class="control-panel">
+            <div class="setting-item"><label for="playlist-select">Track:</label><select id="playlist-select"></select></div>
+            <div class="setting-item"><label for="wall-media-select">Wall Media:</label><select id="wall-media-select"></select></div>
+            <div class="setting-item"><input type="file" id="media-upload" accept="image/*,video/mp4" multiple><label for="media-upload" style="width:100%; text-align:center;">Upload Media</label></div>
+            <div class="setting-item"><button id="edit-walls-button" style="width:100%;">Edit Walls</button></div>
+            <div id="color-palette"></div>
+            <hr style="width:100%; border-color: #555;">
+            <label>Sample Pads:</label>
+            <div id="sample-pads-container"></div>
+            <hr style="width:100%; border-color: #555;">
+            <div class="setting-item"><label for="main-brightness-slider">Main Room:</label><input type="range" id="main-brightness-slider" min="0" max="5" step="0.1" value="1.5"></div>
+            <div class="setting-item"><label for="booth-brightness-slider">Booth:</label><input type="range" id="booth-brightness-slider" min="0" max="3" step="0.1" value="1.0"></div>
+            <div class="setting-item"><label for="art-brightness-slider">Art Brightness:</label><input type="range" id="art-brightness-slider" min="0" max="2" step="0.05" value="0"></div>
+        </div>
+        
+        <div id="audio-controls-container">
+            <!-- Recording UI -->
+            <div id="recording-panel" class="control-panel">
+                <button id="record-button">Record</button>
+                <button id="loop-button" disabled>Loop</button>
+                <button id="save-button" disabled>Save</button>
+            </div>
+             <!-- Sample Editor UI -->
+            <div id="sample-editor" class="control-panel">
+                <select id="sample-source-select"><option value="track">Main Track</option><option value="recording" disabled>Last Recording</option></select>
+                <button id="set-start-button">Set Start</button>
+                <button id="set-end-button">Set End</button>
+                <input type="text" id="sample-name-input" placeholder="Sample Name">
+                <button id="save-sample-button">Save Sample</button>
+            </div>
+            <!-- Audio Player UI -->
+            <div id="audio-player" class="control-panel">
+                <input type="file" id="audio-upload" accept=".mp3" multiple>
+                <label for="audio-upload" id="audio-upload-label">Upload MP3s</label>
+                <button id="prev-button" disabled>&#9664;&#9664;</button>
+                <button id="play-pause-button" disabled>&#9654;</button>
+                <button id="next-button" disabled>&#9654;&#9654;</button>
+                <div id="now-playing">No track loaded</div>
+            </div>
+        </div>
+
+		<!-- Import Map for Three.js modules -->
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+					"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+				}
+			}
+		</script>
+
+		<script type="module">
+            // --- PLACEHOLDER LINKS FOR EXTERNAL MODULES ---
+            // import { MySoundLooper1 } from './js/my-sound-looper-1.js';
+            // import { MySoundLooper2 } from './js/my-sound-looper-2.js';
+
+			import * as THREE from 'three';
+			import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+            import { DragControls } from 'three/addons/controls/DragControls.js';
+
+            // --- DEFAULT ASSETS ---
+            const defaultPlaylist = [ { name: "Default Track 1", url: "1.mp3" } ];
+            const defaultMedia = [ { name: "Abstract Art", url: "https://placehold.co/600x400/334155/E2E8F0?text=Abstract", type: "image" }, { name: "Cityscape", url: "https://placehold.co/600x400/7C3AED/F3E8FF?text=City", type: "image" } ];
+
+			// --- 1. CORE SETUP ---
+			const scene = new THREE.Scene();
+			scene.background = new THREE.Color(0x101a1a);
+            const clock = new THREE.Clock();
+			const camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
+			camera.position.set(8, 8, 14);
+			const renderer = new THREE.WebGLRenderer({ antialias: true });
+			renderer.setSize( window.innerWidth, window.innerHeight );
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+			document.body.appendChild( renderer.domElement );
+
+            const orbitControls = new OrbitControls(camera, renderer.domElement);
+            orbitControls.enableDamping = true;
+            orbitControls.target.set(0, 2, 0);
+
+            // --- 2. ROOM & LIGHTING ---
+            const texturableObjects = [];
+            const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.8 });
+			const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9, emissive: 0xffffff, emissiveIntensity: 0 });
+			const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), floorMaterial);
+			floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+			scene.add(floor);
+
+            const wallHeight = 10;
+            const backWall = new THREE.Mesh(new THREE.BoxGeometry(30, wallHeight, 0.5), wallMaterial.clone());
+            backWall.position.set(0, wallHeight / 2, -15);
+            backWall.receiveShadow = true;
+            scene.add(backWall);
+            texturableObjects.push(backWall);
+
+            const leftWall = new THREE.Mesh(new THREE.BoxGeometry(30, wallHeight, 0.5), wallMaterial.clone());
+            leftWall.position.set(-15, wallHeight / 2, 0);
+            leftWall.rotation.y = Math.PI / 2;
+            leftWall.receiveShadow = true;
+            scene.add(leftWall);
+            texturableObjects.push(leftWall);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+            
+            const mainRoomLight = new THREE.PointLight(0xffeedd, 1.5, 200, 1);
+            mainRoomLight.position.set(0, 9, 5);
+            mainRoomLight.castShadow = true;
+            scene.add(mainRoomLight);
+
+            const boothLight = new THREE.PointLight(0xddeeff, 1.0, 30);
+            boothLight.position.set(5, 7, -8);
+            boothLight.castShadow = true;
+            scene.add(boothLight);
+
+            const trackLightGroup = new THREE.Group();
+            const track = new THREE.Mesh(new THREE.BoxGeometry(12, 0.2, 0.2), new THREE.MeshStandardMaterial({color: 0x050505}));
+            trackLightGroup.add(track);
+            for (let i = 0; i < 3; i++) {
+                const spotLight = new THREE.SpotLight(0xffffff, 2, 30, Math.PI / 8, 0.5, 2);
+                spotLight.position.set(-5 + i * 5, -0.5, 0);
+                spotLight.castShadow = true;
+                spotLight.target.position.set(-5 + i * 5, 0, -5);
+                trackLightGroup.add(spotLight);
+                trackLightGroup.add(spotLight.target);
+            }
+            trackLightGroup.position.set(0, 9.8, 0);
+            scene.add(trackLightGroup);
+
+
+            // --- 3. ASSET & UI MANAGEMENT ---
+            const listener = new THREE.AudioListener(); camera.add(listener);
+            let positionalAudio; const audioLoader = new THREE.AudioLoader(); let analyser;
+            let uploadedTracks = []; let playlist = [...defaultPlaylist]; let currentTrackIndex = 0;
+            let trackPlaybackTime = 0;
+            
+            let uploadedMedia = []; let mediaList = [...defaultMedia]; let currentMediaIndex = 0;
+            const textureLoader = new THREE.TextureLoader();
+            let isPlacingArt = false;
+            let audioContextResumed = false;
+            const videoElement = document.createElement('video');
+            videoElement.loop = true; videoElement.muted = true; videoElement.playsInline = true;
+
+            const allUI = {
+                infoDiv: document.getElementById('info'),
+                settingsPanel: document.getElementById('settings-panel'),
+                menuToggleButton: document.getElementById('menu-toggle-button'),
+                audioToggleButton: document.getElementById('audio-toggle-button'),
+                audioControlsContainer: document.getElementById('audio-controls-container'),
+                playPauseButton: document.getElementById('play-pause-button'),
+                prevButton: document.getElementById('prev-button'),
+                nextButton: document.getElementById('next-button'),
+                nowPlaying: document.getElementById('now-playing'),
+                audioUpload: document.getElementById('audio-upload'),
+                playlistSelect: document.getElementById('playlist-select'),
+                wallMediaSelect: document.getElementById('wall-media-select'),
+                mediaUpload: document.getElementById('media-upload'),
+                colorPaletteDiv: document.getElementById('color-palette'),
+                mainBrightnessSlider: document.getElementById('main-brightness-slider'),
+                boothBrightnessSlider: document.getElementById('booth-brightness-slider'),
+                artBrightnessSlider: document.getElementById('art-brightness-slider'),
+                editWallsButton: document.getElementById('edit-walls-button'),
+                recordButton: document.getElementById('record-button'),
+                loopButton: document.getElementById('loop-button'),
+                saveButton: document.getElementById('save-button'),
+                sampleEditor: document.getElementById('sample-editor'),
+                sampleSourceSelect: document.getElementById('sample-source-select'),
+                setStartButton: document.getElementById('set-start-button'),
+                setEndButton: document.getElementById('set-end-button'),
+                sampleNameInput: document.getElementById('sample-name-input'),
+                saveSampleButton: document.getElementById('save-sample-button'),
+                samplePadsContainer: document.getElementById('sample-pads-container')
+            };
+
+            // --- 4. RECORDING & SAMPLING SETUP ---
+            let mediaRecorder; let recordedChunks = []; let recordedAudio = new Audio();
+            const MAX_SAMPLES = 8;
+            let samples = [];
+            let sampleChannels = [];
+            for (let i = 0; i < MAX_SAMPLES; i++) {
+                sampleChannels.push(new THREE.PositionalAudio(listener));
+            }
+            let currentSample = { start: 0, end: 0 };
+
+            // --- 5. CREATE STUDIO EQUIPMENT (Functions are collapsed for brevity) ---
+            const draggableObjects = [];
+            function createSpeaker() { const g = new THREE.Group(); const b = new THREE.Mesh(new THREE.BoxGeometry(1, 1.5, 1.2), new THREE.MeshStandardMaterial({ color: 0x1a1a1a })); b.castShadow = true; const c = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.1, 32), new THREE.MeshStandardMaterial({ color: 0x888888 })); c.position.set(0, 0.2, 0.55); const t = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.1, 32), new THREE.MeshStandardMaterial({ color: 0x555555 })); t.position.set(0, -0.4, 0.55); g.add(b, c, t); return { group: g, cone: c }; }
+            function createMixingDesk() { return new THREE.Mesh(new THREE.BoxGeometry(6, 2, 3), new THREE.MeshStandardMaterial({ color: 0x2c3e50 })); }
+            function createKeyboard() { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.BoxGeometry(4, 2.5, 2), new THREE.MeshStandardMaterial({ color: 0x111111 }))); g.children[0].position.y = 1.25; g.add(new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.5, 1.8), new THREE.MeshStandardMaterial({ color: 0xffffff }))); g.children[1].position.y = 2.75; g.castShadow = true; return g;}
+            function createRecordingBooth() { const g = new THREE.Group(); const m = new THREE.MeshStandardMaterial({ color: 0x504A4B }); g.add(new THREE.Mesh(new THREE.BoxGeometry(8, 9, 0.5), m)); g.children[0].position.set(0, 4.5, -4); g.add(new THREE.Mesh(new THREE.BoxGeometry(8, 9, 0.5), m)); g.children[1].position.set(-4, 4.5, 0); g.children[1].rotation.y = Math.PI/2; const p = new THREE.MeshPhysicalMaterial({color: 0xaaefff, metalness: 0.1, roughness: 0.05, transmission: 1.0, thickness: 1.5, ior: 1.5}); g.add(new THREE.Mesh(new THREE.BoxGeometry(8, 9, 0.4), p)); g.children[2].position.set(0, 4.5, 4); return g; }
+            function createMicStand() { const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.1, 32), new THREE.MeshStandardMaterial({color: 0x222222}))); g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 5, 32), new THREE.MeshStandardMaterial({color: 0x444444}))); g.children[1].position.y = 2.5; g.add(new THREE.Mesh(new THREE.SphereGeometry(0.25, 32, 32), new THREE.MeshStandardMaterial({color: 0x888888}))); g.children[2].position.y = 5; g.castShadow = true; return g; }
+
+            // --- 6. INSTANTIATE AND POSITION OBJECTS ---
+            const mixingDesk = createMixingDesk(); mixingDesk.position.set(0, 1, 8); scene.add(mixingDesk); draggableObjects.push(mixingDesk);
+            const speaker1Data = createSpeaker(); const speaker1 = speaker1Data.group; const speaker1Cone = speaker1Data.cone; speaker1.position.set(-4, 2.75, 7.5); scene.add(speaker1); draggableObjects.push(speaker1);
+            positionalAudio = new THREE.PositionalAudio(listener); speaker1.add(positionalAudio);
+            sampleChannels.forEach(ch => speaker1.add(ch)); // Add all sample channels to the speaker
+            analyser = new THREE.AudioAnalyser(positionalAudio, 32);
+            const speaker2Data = createSpeaker(); const speaker2 = speaker2Data.group; speaker2.position.set(4, 2.75, 7.5); scene.add(speaker2); draggableObjects.push(speaker2);
+            const keyboard = createKeyboard(); keyboard.position.set(8, 0, 2); scene.add(keyboard); draggableObjects.push(keyboard);
+            const recordingBooth = createRecordingBooth(); recordingBooth.position.set(5, 0, -8); scene.add(recordingBooth);
+            const micStand = createMicStand(); micStand.position.set(5, 0.05, -8); scene.add(micStand);
+
+            // --- 7. DIGITAL TIMER ---
+            const timerCanvas = document.createElement('canvas');
+            const timerContext = timerCanvas.getContext('2d');
+            timerCanvas.width = 512; timerCanvas.height = 128;
+            const timerTexture = new THREE.CanvasTexture(timerCanvas);
+            const timerMaterial = new THREE.MeshBasicMaterial({ map: timerTexture, transparent: true });
+            const timerMesh = new THREE.Mesh(new THREE.PlaneGeometry(4, 1), timerMaterial);
+            timerMesh.position.set(-13, 8, -14.7); // Moved to the left corner
+            scene.add(timerMesh);
+
+            function drawTimer(time) {
+                const minutes = Math.floor(time / 60).toString().padStart(2, '0');
+                const seconds = Math.floor(time % 60).toString().padStart(2, '0');
+                const milliseconds = Math.floor((time * 100) % 100).toString().padStart(2, '0');
+                const timeString = `${minutes}:${seconds}:${milliseconds}`;
+
+                timerContext.clearRect(0, 0, timerCanvas.width, timerCanvas.height);
+                timerContext.font = "bold 80px monospace";
+                timerContext.fillStyle = "rgba(255, 0, 0, 0.8)";
+                timerContext.textAlign = "center";
+                timerContext.textBaseline = "middle";
+                timerContext.fillText(timeString, timerCanvas.width / 2, timerCanvas.height / 2);
+                timerTexture.needsUpdate = true;
+            }
+            drawTimer(0);
+
+			// --- 8. INTERACTIVITY (DRAG, LIGHTS, TEXTURES, MENU) ---
+            const dragControls = new DragControls(draggableObjects, camera, renderer.domElement);
+            dragControls.addEventListener('dragstart', (e) => { orbitControls.enabled = false; });
+            dragControls.addEventListener('dragend', (e) => { orbitControls.enabled = true; });
+            allUI.mainBrightnessSlider.addEventListener('input', (e) => { mainRoomLight.intensity = parseFloat(e.target.value); });
+            allUI.boothBrightnessSlider.addEventListener('input', (e) => { boothLight.intensity = parseFloat(e.target.value); });
+            allUI.artBrightnessSlider.addEventListener('input', (e) => { texturableObjects.forEach(obj => { obj.material.emissiveIntensity = parseFloat(e.target.value); }); });
+            allUI.menuToggleButton.addEventListener('click', () => allUI.settingsPanel.classList.toggle('hidden'));
+            allUI.audioToggleButton.addEventListener('click', () => allUI.audioControlsContainer.classList.toggle('hidden'));
+            
+            allUI.editWallsButton.addEventListener('click', () => {
+                isPlacingArt = !isPlacingArt;
+                allUI.editWallsButton.classList.toggle('active', isPlacingArt);
+                if (isPlacingArt) { allUI.editWallsButton.textContent = "Done Editing"; allUI.infoDiv.textContent = "Click a wall to place the selected art."; } 
+                else { allUI.editWallsButton.textContent = "Edit Walls"; allUI.infoDiv.textContent = "Welcome to the Studio!"; }
+            });
+
+            const raycaster = new THREE.Raycaster(); const mouse = new THREE.Vector2();
+            renderer.domElement.addEventListener('click', (e) => {
+                if (!isPlacingArt) return;
+                mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = - (e.clientY / window.innerHeight) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(texturableObjects);
+                if (intersects.length > 0) {
+                    const selectedMedia = mediaList[currentMediaIndex];
+                    if (!selectedMedia) return;
+                    
+                    let texture;
+                    if (selectedMedia.type === 'video') {
+                        videoElement.src = selectedMedia.url;
+                        videoElement.play();
+                        texture = new THREE.VideoTexture(videoElement);
+                    } else {
+                        texture = textureLoader.load(selectedMedia.url);
+                    }
+                    texture.colorSpace = THREE.SRGBColorSpace;
+                    const wallMat = intersects[0].object.material;
+                    wallMat.map = texture;
+                    wallMat.emissiveMap = texture;
+                    wallMat.needsUpdate = true;
+                }
+            });
+
+            // --- 9. MEDIA & PALETTE LOGIC ---
+            function updateMediaSelector() { mediaList = [...defaultMedia, ...uploadedMedia]; allUI.wallMediaSelect.innerHTML = ''; mediaList.forEach((media, i) => { const o = document.createElement('option'); o.value = i; o.textContent = media.name; allUI.wallMediaSelect.appendChild(o); }); allUI.wallMediaSelect.selectedIndex = currentMediaIndex; if (mediaList[currentMediaIndex].type === 'image') { extractAndDisplayPalette(mediaList[currentMediaIndex].url); } else { allUI.colorPaletteDiv.innerHTML = ''; } }
+            allUI.mediaUpload.addEventListener('change', (e) => { const n = Array.from(e.target.files).map(f => ({ name: f.name, url: URL.createObjectURL(f), type: f.type.startsWith('video') ? 'video' : 'image' })); const i = mediaList.length; uploadedMedia.push(...n); currentMediaIndex = i; updateMediaSelector(); });
+            allUI.wallMediaSelect.addEventListener('change', (e) => { currentMediaIndex = parseInt(e.target.value); if (mediaList[currentMediaIndex].type === 'image') { extractAndDisplayPalette(mediaList[currentMediaIndex].url); } else { allUI.colorPaletteDiv.innerHTML = ''; } });
+            
+            function colorDistance(rgb1, rgb2) {
+                let r = rgb1[0] - rgb2[0], g = rgb1[1] - rgb2[1], b = rgb1[2] - rgb2[2];
+                return Math.sqrt(r * r + g * g + b * b);
+            }
+
+            function extractAndDisplayPalette(imageUrl) { const img = new Image(); img.crossOrigin = "Anonymous"; img.src = imageUrl; img.onload = () => { const c = document.createElement('canvas'); const x = c.getContext('2d'); c.width = 50; c.height = 50; x.drawImage(img, 0, 0, c.width, c.height); const d = x.getImageData(0, 0, c.width, c.height).data; const o = {}; for (let i = 0; i < d.length; i += 4) { const r = d[i], g = d[i+1], b = d[i+2]; const l = 0.2126 * r + 0.7152 * g + 0.0722 * b; const s = Math.max(r,g,b) - Math.min(r,g,b); if (l < 40 || l > 220 || s < 30) continue; const k = `${r},${g},${b}`; o[k] = (o[k] || 0) + 1; } const s = Object.keys(o).sort((a, b) => o[b] - o[a]); const finalPalette = []; const minDistance = 100; if(s.length > 0) { finalPalette.push(s[0].split(',').map(Number)); } for (let i = 1; i < s.length && finalPalette.length < 5; i++) { const currentColor = s[i].split(',').map(Number); let isDistinct = true; for (const color of finalPalette) { if (colorDistance(currentColor, color) < minDistance) { isDistinct = false; break; } } if (isDistinct) { finalPalette.push(currentColor); } } allUI.colorPaletteDiv.innerHTML = ''; finalPalette.forEach(color => { const w = document.createElement('div'); w.className = 'color-swatch'; w.style.backgroundColor = `rgb(${color.join(',')})`; w.addEventListener('click', () => { floor.material.color.set(w.style.backgroundColor); }); allUI.colorPaletteDiv.appendChild(w); }); }; img.onerror = () => { allUI.colorPaletteDiv.innerHTML = ''; }; }
+
+            // --- 10. AUDIO PLAYER LOGIC ---
+            function resumeAudioContext() { if (!audioContextResumed && listener.context.state === 'suspended') { listener.context.resume(); audioContextResumed = true; } }
+            function updatePlaylistUI() { playlist = [...defaultPlaylist, ...uploadedTracks]; allUI.playlistSelect.innerHTML = ''; playlist.forEach((t, i) => { const o = document.createElement('option'); o.value = i; o.textContent = t.name; allUI.playlistSelect.appendChild(o); }); allUI.playlistSelect.selectedIndex = currentTrackIndex; updateButtons(); }
+            allUI.audioUpload.addEventListener('change', (e) => { resumeAudioContext(); const n = Array.from(e.target.files).map(f => ({ name: f.name, url: URL.createObjectURL(f) })); const i = playlist.length; uploadedTracks.push(...n); currentTrackIndex = i; updatePlaylistUI(); loadTrack(currentTrackIndex, true); });
+            function loadTrack(index, autoplay = false) { if (positionalAudio.isPlaying) { positionalAudio.stop(); trackPlaybackTime = 0; } currentTrackIndex = index; const track = playlist[index]; allUI.playlistSelect.selectedIndex = index; if (!track.url.startsWith('blob:')) { allUI.nowPlaying.textContent = `${track.name} (placeholder)`; allUI.playPauseButton.textContent = '▶'; allUI.sampleEditor.classList.remove('visible'); updateButtons(); return; } allUI.nowPlaying.textContent = track.name; updateButtons(); audioLoader.load(track.url, (b) => { positionalAudio.setBuffer(b); positionalAudio.setLoop(false); positionalAudio.setRefDistance(20); if (autoplay) { positionalAudio.play(); allUI.playPauseButton.textContent = '❚❚'; allUI.sampleEditor.classList.add('visible'); } else { allUI.playPauseButton.textContent = '▶'; allUI.sampleEditor.classList.remove('visible');} }, () => {}, (err) => { allUI.nowPlaying.textContent = `Error: ${track.name}`; }); }
+            function updateButtons() { const t = playlist[currentTrackIndex]; const p = t && t.url.startsWith('blob:'); allUI.playPauseButton.disabled = !p; allUI.prevButton.disabled = currentTrackIndex === 0; allUI.nextButton.disabled = currentTrackIndex === playlist.length - 1; }
+            allUI.playPauseButton.addEventListener('click', () => { resumeAudioContext(); if (!positionalAudio.buffer) return; if (positionalAudio.isPlaying) { positionalAudio.pause(); allUI.playPauseButton.textContent = '▶'; allUI.sampleEditor.classList.remove('visible'); } else { positionalAudio.play(); allUI.playPauseButton.textContent = '❚❚'; allUI.sampleEditor.classList.add('visible'); } });
+            allUI.nextButton.addEventListener('click', () => { resumeAudioContext(); if (currentTrackIndex < playlist.length - 1) loadTrack(currentTrackIndex + 1, true); });
+            allUI.prevButton.addEventListener('click', () => { resumeAudioContext(); if (currentTrackIndex > 0) loadTrack(currentTrackIndex - 1, true); });
+            allUI.playlistSelect.addEventListener('change', (e) => { resumeAudioContext(); const a = positionalAudio.isPlaying; loadTrack(parseInt(e.target.value), a); });
+
+            // --- 11. RECORDER & SAMPLER LOGIC ---
+            async function startRecording() { try { resumeAudioContext(); const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); mediaRecorder = new MediaRecorder(stream); mediaRecorder.start(); allUI.recordButton.textContent = "Stop"; allUI.recordButton.classList.add('recording'); recordedChunks = []; mediaRecorder.addEventListener('dataavailable', e => recordedChunks.push(e.data)); mediaRecorder.addEventListener('stop', () => { const audioBlob = new Blob(recordedChunks, { type: 'audio/webm' }); const audioUrl = URL.createObjectURL(audioBlob); recordedAudio.src = audioUrl; recordedAudio.play(); allUI.saveButton.disabled = false; allUI.loopButton.disabled = false; allUI.sampleSourceSelect.querySelector('option[value="recording"]').disabled = false; }); } catch (err) { console.error("Error:", err); allUI.infoDiv.textContent = "Mic access denied."; allUI.recordButton.textContent = "Record"; allUI.recordButton.classList.remove('recording'); allUI.sampleSourceSelect.querySelector('option[value="recording"]').disabled = true; } }
+            function stopRecording() { mediaRecorder.stop(); allUI.recordButton.textContent = "Record"; allUI.recordButton.classList.remove('recording'); }
+            allUI.recordButton.addEventListener('click', () => { resumeAudioContext(); if (mediaRecorder && mediaRecorder.state === "recording") { stopRecording(); } else { startRecording(); } });
+            allUI.loopButton.addEventListener('click', () => { recordedAudio.loop = !recordedAudio.loop; allUI.loopButton.classList.toggle('active', recordedAudio.loop); });
+            allUI.saveButton.addEventListener('click', () => { const a = document.createElement('a'); a.style.display = 'none'; a.href = recordedAudio.src; a.download = 'studio-recording.webm'; document.body.appendChild(a); a.click(); document.body.removeChild(a); });
+            
+            allUI.setStartButton.addEventListener('click', () => { const source = allUI.sampleSourceSelect.value; if (source === 'track' && positionalAudio.isPlaying) { currentSample.start = trackPlaybackTime; } else if (source === 'recording') { currentSample.start = recordedAudio.currentTime; } });
+            allUI.setEndButton.addEventListener('click', () => { const source = allUI.sampleSourceSelect.value; if (source === 'track' && positionalAudio.isPlaying) { currentSample.end = trackPlaybackTime; } else if (source === 'recording') { currentSample.end = recordedAudio.currentTime; } });
+            allUI.saveSampleButton.addEventListener('click', () => { if (currentSample.end > currentSample.start && allUI.sampleNameInput.value && samples.length < MAX_SAMPLES) { const source = allUI.sampleSourceSelect.value; const newSample = { name: allUI.sampleNameInput.value, start: currentSample.start, end: currentSample.end, sourceType: source }; if (source === 'track') { newSample.buffer = positionalAudio.buffer; } else { newSample.url = recordedAudio.src; } samples.push(newSample); updateSamplePads(); allUI.sampleNameInput.value = ''; } });
+            
+            function updateSamplePads() {
+                allUI.samplePadsContainer.innerHTML = '';
+                for(let i=0; i < MAX_SAMPLES; i++) {
+                    const pad = document.createElement('div');
+                    pad.className = 'sample-pad';
+                    const nameDiv = document.createElement('div');
+                    nameDiv.className = 'sample-pad-name';
+                    const controlsDiv = document.createElement('div');
+                    controlsDiv.className = 'sample-pad-controls';
+                    const buttonRow = document.createElement('div');
+                    buttonRow.className = 'button-row';
+                    const playBtn = document.createElement('button');
+                    playBtn.textContent = 'Play';
+                    const loopBtn = document.createElement('button');
+                    loopBtn.textContent = 'Loop';
+                    const volSlider = document.createElement('input');
+                    volSlider.type = 'range'; volSlider.min = 0; volSlider.max = 1; volSlider.step = 0.05; volSlider.value = 1;
+                    volSlider.oninput = (e) => sampleChannels[i].setVolume(parseFloat(e.target.value));
+
+                    if (samples[i]) {
+                        nameDiv.textContent = samples[i].name;
+                        playBtn.onclick = () => playSample(i, false);
+                        loopBtn.onclick = (e) => {
+                            const channel = sampleChannels[i];
+                            const isLooping = channel.loop && channel.isPlaying;
+                            e.target.classList.toggle('active', !isLooping);
+                            if(isLooping) channel.stop();
+                            else playSample(i, true);
+                        };
+                    } else {
+                        nameDiv.textContent = `Pad ${i+1}`;
+                        playBtn.disabled = true;
+                        loopBtn.disabled = true;
+                        volSlider.disabled = true;
+                    }
+                    buttonRow.append(playBtn, loopBtn);
+                    controlsDiv.append(buttonRow, volSlider);
+                    pad.append(nameDiv, controlsDiv);
+                    allUI.samplePadsContainer.appendChild(pad);
+                }
+            }
+
+            function playSample(sampleIndex, isLooping = false) {
+                resumeAudioContext();
+                const s = samples[sampleIndex];
+                if (!s) return;
+                
+                const channel = sampleChannels[sampleIndex];
+                if (channel.isPlaying) channel.stop();
+
+                const playSegment = (buffer) => {
+                    channel.setBuffer(buffer);
+                    channel.setLoop(isLooping);
+                    if(isLooping) {
+                        channel.setLoopStart(s.start);
+                        channel.setLoopEnd(s.end);
+                        channel.offset = s.start;
+                    } else {
+                        channel.offset = s.start;
+                        channel.duration = s.end - s.start;
+                    }
+                    channel.play();
+                };
+
+                if (s.sourceType === 'track') {
+                    playSegment(s.buffer);
+                } else if (s.sourceType === 'recording') {
+                    audioLoader.load(s.url, playSegment);
+                }
+            }
+
+            // --- 12. INITIALIZATION & ANIMATION ---
+            updatePlaylistUI();
+            updateMediaSelector();
+            updateSamplePads();
+            loadTrack(0);
+
+			function animate() {
+				requestAnimationFrame( animate );
+                const delta = clock.getDelta();
+                orbitControls.update();
+                
+                if (positionalAudio && positionalAudio.isPlaying) {
+                    trackPlaybackTime += delta;
+                    drawTimer(trackPlaybackTime);
+                } else {
+                    trackPlaybackTime = 0;
+                }
+
+                if (analyser && speaker1Cone && positionalAudio.isPlaying) {
+                    const avgFrequency = analyser.getAverageFrequency();
+                    const scale = 1 + avgFrequency / 400;
+                    speaker1Cone.scale.set(scale, scale, 1);
+                } else {
+                    speaker1Cone.scale.set(1, 1, 1);
+                }
+				renderer.render( scene, camera );
+			}
+            window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+			animate();
+		</script>
+	</body>
+</html>
